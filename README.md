@@ -1,4 +1,4 @@
-# Rock Classification ML Toolkit
+# Rock Classification ML Prediction Module
 
 A Python-based machine learning program designed to classify rocks based on geochemical data. This toolkit assists geoscientists in evaluating compositional datasets but can also be adapted for other non-geologic classification tasks.
 
@@ -15,6 +15,12 @@ A Python-based machine learning program designed to classify rocks based on geoc
 - In-code comments and descriptions support clear interpretation
 
 ## Installation
+
+Clone this repository to your local machine:
+
+```bash
+git clone https://github.com/MasterGeochemAngel/Machine_Learning_Prediction_Module.git
+```
 
 Before running the program, install the required Python packages:
 
