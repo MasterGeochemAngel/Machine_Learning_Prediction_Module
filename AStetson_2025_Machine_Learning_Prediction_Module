@@ -1,0 +1,324 @@
+# Geochemical Machine Learning Prediction Module created by Angela Stetson (2025)
+
+import os
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
+from sklearn.svm import SVC
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPClassifier
+from sklearn.exceptions import ConvergenceWarning
+import warnings
+
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+def remove_nan(data, file_description):
+    """
+    This function is designed to remove any NaN or na variables from your datasets. This function is called
+    twice, once for the learning set and once for the prediction set. In order for machine learning to work, the
+    modules must have CSV files that do not have any empty data cells. If any empty cells were not removed prior to
+    the execution of this module, this function will remove them either by row, column, or both. Following the
+    removal of NaN, the dataframe index will be reset. If an invalid entry occurs, the user will be informed that the
+    entry was invalid and prompted to input a valid entry. The program continues following valid inputs.
+
+    Parameters:
+    -----------
+    User input can be one of the following answers (without quotes):
+    'rows' - rows containing NaN will be removed.
+      Choosing this option will reduce the number of training or classification samples but retain the parameters
+        used for training and classification.
+
+    'columns' - columns containing NaN will be removed.
+      Choosing this option will reduce the number of parameters used for training and classification but retain the
+        number of samples used for training and classification.
+
+    'both' - both rows and columns containing NaN will be removed.
+      Choosing this option will reduce the training and classification parameters and the number of samples used for
+        training and classification. Choosing this option can drastically reduce the size of datasets, so this choice
+        should be used sparingly.
+
+    Returns:
+    --------
+    DataFrame
+      A modified data frame will be generated based on the input answer.
+    """
+    while True:
+        print(f"Are there any NaN variables in {file_description}?")
+        choice = input("If so, do you want to remove them by rows, columns, or both? (Type 'rows', 'columns', or 'both'): ").lower()
+
+        if choice == 'rows':
+            data = data.dropna(axis=0)
+        elif choice == 'columns':
+            data = data.dropna(axis=1)
+        elif choice == 'both':
+            data = data.dropna()
+        else:
+            print("Invalid choice. Please choose 'rows', 'columns', or 'both'.")
+            continue
+
+        return data.reset_index(drop=True)
+
+def get_valid_file_path(prompt):
+    """
+    Prompt the user for a file path and validate it. This function is called two times, once for the learning set and once for
+    the prediction set. Both input CSV files contain the classifying parameters (i.e. geochemical data, location data, petrographic
+    data, etc.). The learning CSV file must have a column that labels each row for classification. The prediction CSV must have
+    column that provides a unique name for each row. The column names being used for classification must match in both the learning
+    set and the prediction set, matching is case sensitive. If an invalid entry occurs, the program will inform the user the entry was
+    invalid and will continue once the user enters a valid file path.
+
+    Parameter:
+    ----------
+    User input: CSV file path
+      Input must be a valid CSV file path(thus ends with '.csv'). For ease, it is suggested to store learning and prediction
+        CSVs in the working directory.
+
+    """
+    while True:
+        file_path = input(prompt).strip()
+        if os.path.isfile(file_path):
+            return file_path
+        else:
+            print("Invalid file path. Please enter a valid file path.")
+
+def get_valid_float(prompt):
+    """
+    Prompt the user for a float value and validate it. This floating-point represents the proportion of the learning set used for
+    testing the training model. Only decimals between 0.0 and 1.0 are accepted. This number can vary but ideally inputs should stay
+    between 0.05 and 0.2. Having too high or too low training/testing fraction can lead to a number of interpretive issues, including,
+    but not limited to, over-under fitting, biased sampling, or a high variance in model performance. If an invalid entry is made, the
+    user will be alerted and asked to enter a valid entry. The program continues following a valid entry.
+
+    Parameter:
+    ----------
+    User input: <float>
+      Only values between 0.0 and 1.0 are accepted.
+    """
+    while True:
+          try:
+              value = input(prompt)
+              if value in {'1', '1.0'}:
+                  print("Invalid input. Please enter a valid floating-point number.")
+                  continue
+              value = float(value)
+              if 0 < value <= 1:
+                  return value
+              else:
+                  print("Value must be between 0 and 1.")
+          except ValueError:
+              print("Invalid input. Please enter a valid floating-point number.")
+
+def get_model_choice():
+    """
+    Prompt the user for the choice of machine learning model. The user has 6 supervised (meaning classification is determined
+    using labeled training data) learning model options to choose from. Only integers between 1 and 6 are accepted. If the user
+    input is invalid, the user will be informed and instructed to enter an integer between 1 and 6. The program continues
+    following a valid entry.
+
+    Parameters:
+    -----------
+    User input: <int>
+      Inputs must be between 1 and 6. Input options are as follows:
+        1. Logistic Regression: Binary or multinomial classification. Here, a statistical multiclass
+          model which predicts multiple outcomes determined from 1 or more parameters. Outcomes
+          are determined by calculating the probability of each possible outcome and then selecting the
+          outcome with the highest probability. For more information on logistic regression, see:
+          Scikit-learn Logistic Regression documentation -
+          https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html.
+        2. Random Forest Classifier: Random forest predicts classification based on the average
+          prediction outcome of a number of decision trees of various sub groups of samples. For more inforamtion on
+          random forest classification, see: Scikit-learn Random Forest documentation -
+          https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html.
+        3. Support Vector Machine Classifier: Binary or multinomial classification; here, the model assigns the
+          'ovo', or one-vs-one, method to extend binary classification algorithms to multinomial classification.
+          This model finds the best hyperplane (or multi-dimensional space) that best separates the data. For more
+          information on support vector machines, see: Scikit-learn SVM documentation -
+          https://scikit-learn.org/stable/modules/svm.html.
+        4. Naive Bayes Classifier: Naive Bayes applies Bayes' theorem with the naive assumption that features are
+          conditionally independent of one another given their classification. For more information on Naive Bayes Classifier
+          and Bayes'theorem, see: Scikit-learn Naive Bayes documentation - https://scikit-learn.org/stable/modules/naive_bayes.html.
+        5. Neural Network Classifier: Modeled to work in the same way the human brain makes decisions,
+          MLP (Multilayer Perceptron) neural network models are a type of artificial neural network
+          composed of multiple layers of nodes, or neurons. The model consists of an input layer, one or more
+          hidden layers, and an output layer. Each layer is made up of interconnected neurons that process information.
+          MLPs learn by adjusting the weights of connections between neurons during training to minimize
+          errors in predictions. For more information on MLP neural networks, see: Scikit-learn MLP documentation -
+          https://scikit-learn.org/stable/modules/neural_networks_supervised.html.
+        6. Perform All: This option will perform all of the above machine learning models in one step. This is a great
+          option for a quick and easy prediction of all models, or if the user wants to find the best fit model for futher analysis.
+    """
+    while True:
+        model_choice = input("Enter your choice (1 for Logistic Regression, 2 for Random Forest, 3 for SVM, 4 for Naive Bayes, 5 MLP Classifier, or 6 for all models): ")
+        if model_choice.isdigit():
+            model_choice = int(model_choice)
+            if model_choice == 6:
+                return [
+                    LogisticRegression(),  # For coustomization, edit solver and class type
+                    RandomForestClassifier(),
+                    SVC(kernel='linear', probability=True),  # For coustomization, edit kernal, decision function shape, and probability
+                    GaussianNB(),
+                    MLPClassifier(max_iter=5000, solver='adam', learning_rate_init=0.001)  # For coustomization, increase iterations and adjusted learning rate
+                ]
+            elif model_choice in {1, 2, 3, 4, 5}:
+                models = []
+                if model_choice == 1:
+                    models.append(LogisticRegression(solver = 'lbfgs', multi_class = 'multinomial'))  # For coustomization, edit solver and class type
+                elif model_choice == 2:
+                    models.append(RandomForestClassifier())
+                elif model_choice == 3:
+                    models.append(SVC(kernel = 'linear', decision_function_shape = 'ovo', probability = True))  # For coustomization, edit kernal, decision function shape, and probability
+                elif model_choice == 4:
+                    models.append(GaussianNB())
+                elif model_choice == 5:
+                    models.append(MLPClassifier(max_iter = 5000, solver = 'adam', learning_rate_init = 0.001))  # For coustomization, increase iterations and adjusted learning rate
+                return models
+            else:
+                print("Invalid choice. Please enter an integer between 1 and 6.")
+        else:
+            print("Invalid input. Please enter an integer.")
+
+def get_valid_column_name(prompt, dataframe):
+    """
+    Prompt the user for a column name and validate it against the provided dataframe. This function is
+    called twice, once to retrieve the labeled column of the learning set and once for the
+    prediction set. If an invalid column name is entered, the user will be alerted and prompted to enter
+    a valid column name. The program continues following a valid input.
+    """
+    while True:
+        column_name = input(prompt)
+        if column_name in dataframe.columns:
+            return column_name
+        else:
+            print("Invalid column name. Please enter a valid column name.")
+
+def perform_machine_learning():
+    """
+    Perform the machine learning process. This is the function that calls all of the previously defined functions.
+    Following the execution of all other functions, this program will ask the user what parameters they wish to learn
+    from and create a list of inputs. After performing the chosen model(s), the program will generate two new dataframes
+    consisting of 1. the resulting predictions and their sample name for each model chosen, and 2. Performance metrics
+    include the overall cross validation score, and the accuracy, precision, recall, F1-score and Matthew’s Correlation
+    Coefficient (MCC) of the training and testing predictions. The user will be prompted twice to input unique names of the
+    new CSV for each dataframe.
+
+    Parameter:
+    ----------
+    User input: dataframe column name(s). Inputs should be the column(s) the user wishes to use as parameters for learning.
+      At least one input must be given, and as many inputs are allowed as there are columns (with the exception of the
+      labeled column of the learning set and the unique name of the prediction set). Inputs must match column
+      names exactly for both datasets, and are case sensitive. Invalid entries will result in a message informing the user
+      the column name does not exist and then prompts the user to enter a valid column name. The user will enter 'done'
+      (without quotes) when all desired columns are entered. The program continues following an input of 'done'.
+
+    User input: new file name (called twice, once for each dataframe). Only letters, numbers, hyphens (-), and underscores (_) are
+      accepted in the file path. When an invalid input is entered, the user will be asked to enter a different file name.
+      The program continues following a valid entry and completes the machine learning module. It is important to provide unique
+      file names for each CSV (i.e. "Predictions" and "Prediction-stats")
+
+    Return:
+    -------
+    Two CSV files
+      Two separate CSV files with the chosen file names will be created and stored in the working directory.
+    """
+    learning_csv_path = get_valid_file_path("Enter the file path for the learning CSV: ")
+    prediction_csv_path = get_valid_file_path("Enter the file path for the prediction CSV: ")
+
+    learning_data = pd.read_csv(learning_csv_path)
+    prediction_data = pd.read_csv(prediction_csv_path)
+
+    learning_data = remove_nan(learning_data, "learning data")
+    prediction_data = remove_nan(prediction_data, "prediction data")
+
+    sample_number_column = get_valid_column_name("Enter the name of the column containing sample numbers: ", prediction_data)
+    target_column = get_valid_column_name("Enter the name of the target column: ", learning_data)
+
+    features_columns = []
+    print("Enter feature column names one by one. Type 'done' when finished.")
+    while True:
+        column_name = input("Enter feature column name (or 'done' to finish): ")
+        if column_name.lower() == 'done':
+            break
+        if column_name in learning_data.columns:
+            features_columns.append(column_name)
+        else:
+            print(f"Column '{column_name}' not found in learning data. Please enter a valid column name.")
+
+    test_size = get_valid_float("Enter the test size (e.g., 0.2 for 20%): ")
+
+    X = learning_data[features_columns]
+    y = learning_data[target_column]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+
+    models = get_model_choice()
+
+    all_metrics = pd.DataFrame()
+    all_predictions_df = pd.DataFrame({sample_number_column: prediction_data[sample_number_column]})
+
+    metrics_list = []
+    for model in models:
+        model_name = model.__class__.__name__
+        print(f"Training {model_name}...")
+
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(prediction_data[features_columns])
+        all_predictions_df[model_name] = predictions
+
+        y_train_pred = model.predict(X_train)
+        y_test_pred = model.predict(X_test)
+
+        train_metrics = {
+            'accuracy_train': accuracy_score(y_train, y_train_pred),
+            'precision_train': precision_score(y_train, y_train_pred, average='weighted', zero_division=1),
+            'recall_train': recall_score(y_train, y_train_pred, average='weighted', zero_division=1),
+            'f1_score_train': f1_score(y_train, y_train_pred, average='weighted', zero_division=1),
+            'mcc_train': matthews_corrcoef(y_train, y_train_pred)
+        }
+
+        test_metrics = {
+            'accuracy_test': accuracy_score(y_test, y_test_pred),
+            'precision_test': precision_score(y_test, y_test_pred, average='weighted', zero_division=1),
+            'recall_test': recall_score(y_test, y_test_pred, average='weighted', zero_division=1),
+            'f1_score_test': f1_score(y_test, y_test_pred, average='weighted', zero_division=1),
+            'mcc_test': matthews_corrcoef(y_test, y_test_pred)
+        }
+
+        cv_accuracy = cross_val_score(model, X, y, cv=5, scoring='accuracy').mean()
+
+        model_metrics = {
+            'model': model_name,
+            'cv_accuracy': cv_accuracy,
+            **train_metrics,
+            **test_metrics
+        }
+
+        metrics_list.append(model_metrics)
+
+    all_metrics = pd.DataFrame(metrics_list)
+    all_metrics.set_index('model', inplace=True)
+
+    # Format the DataFrame to 4 decimal places
+    pd.options.display.float_format = '{:.4f}'.format
+    all_metrics = all_metrics.round(4)
+
+    while True:
+        output_csv_name = input("Enter the name for the predictions CSV file (without extension): ").strip()
+        output_metrics_csv_name = input("Enter the name for the metrics CSV file (without extension): ").strip()
+        output_csv_path = output_csv_name.replace(' ', '-').replace('_', '-') + ".csv"
+        output_metrics_csv_path = output_metrics_csv_name.replace(' ', '-').replace('_', '-') + ".csv"
+
+        if output_csv_name.replace('-', '').replace('_', '').isalnum() and output_metrics_csv_name.replace('-', '').replace('_', '').isalnum():
+            break
+        else:
+            print("Invalid file name. Please enter a name containing only letters, numbers, hyphens, and underscores.")
+
+    all_predictions_df.to_csv(output_csv_path, index=False)
+    all_metrics.to_csv(output_metrics_csv_path)
+
+    print(f"Predictions saved to {output_csv_path}")
+    print(f"Metrics saved to {output_metrics_csv_path}")
+
+perform_machine_learning()
